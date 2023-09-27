@@ -1,0 +1,8 @@
+aiohttp
+aioice
+aiortc
+av
+cryptography
+opencv-python
+gunicorn
+aiohttp_cors
