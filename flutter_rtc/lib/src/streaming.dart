@@ -146,7 +146,7 @@ Future<void> _negotiateRemoteConnection() async {
     var request = http.Request(
       'POST',
       Uri.parse(
-                'http://10.83.43.14:8080/offer'), // CHANGE URL HERE TO LOCAL SERVER
+                'http://192.168.1.132:8080/offer'), // CHANGE URL HERE TO LOCAL SERVER
     );
 request.body = json.encode(
             {

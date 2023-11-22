@@ -4,11 +4,12 @@ import json
 import logging
 import os
 import ssl
+import threading
 import uuid
 
 import cv2
 from aiohttp import web
-from av import VideoFrame
+import av  
 import aiohttp_cors
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, MediaRelay
@@ -21,7 +22,7 @@ import tensorflow as tf
 
 
 # To load a Keras model:
-# from tensorflow.keras.models import load_model
+from tensorflow.keras.models import load_model
 
 from tensorflow.keras.applications.inception_v3 import preprocess_input
 
@@ -30,21 +31,32 @@ ROOT = os.path.dirname(__file__)
 logger = logging.getLogger("pc")
 pcs = set()
 relay = MediaRelay()
-# model =  keras.models.load_model('predictModel.h5')
+  
+model =  tf.keras.models.load_model('m97.h5', compile=False)
+model.compile(
+      optimizer = tf.keras.optimizers.Adam(learning_rate=1e-5),
+      loss= tf.keras.losses.CategoricalCrossentropy(from_logits = True),
+      metrics=["categorical_accuracy"],
+    )
 label_dict = {0: 'dewberry_blue', 1: 'creco', 2: 'Ahh', 3: ' rollercoaster_cheese', 4: 'bengbeng', 5: 'bento', 6: 'deno_stone', 7: 'chocopie', 8: ' rollercoaster_spicy', 9: 'kitkat', 10: 'lays_3', 11: 'lays_cheese', 12: 'lays_original', 13: 'dewberry_red', 14: 'lay_green', 15: 'ff', 16: 'oreo', 17: 'pringles_green', 18: 'lotus', 19: 'marujo_red', 20: 'marujo_green', 21: 'tilli_indigo', 22: 'tasto_spicy', 23: 'tasto_honey', 24: 'snackjack_chicken', 25: 'snackjack_saltpepper', 26: 'tawan_Larb', 27: 'snackjack_shell', 28: 'tilli_blue', 29: 'tilli_red', 30: 'voice_mocha', 31: 'yupi_fruit', 32: 'twistko', 33: 'voice_choco', 34: 'voice_waffle'}
 # def process_frame(frame):
 #     # Convert the frame to a NumPy ndarray with BGR format
 #     img = frame.to_ndarray(format="bgr24")
+#     # img = img.to_image()
+#     print(type(img))
+
+#     image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) 
 
 #     # Perform image processing or classification using your model
 #     # For example, if your model expects input images of size (224, 224, 3):
 #     img = cv2.resize(img, (224, 224))  # Resize to match the model input size
-#     img = np.expand_dims(img, axis=0)  # Add batch dimension
-#     predictions = model.predict(img)
-#     predicted_label = str(np.argmax(predictions))
+#     # img = np.expand_dims(img, axis=0)  # Add batch dimension
+#     img = np.array(img)
+#     # predictions = model.predict(img)
+#     # predicted_label = str(np.argmax(predictions))
 
 #     # Get the text label from your custom label dictionary
-#     label_text = label_dict.get(predicted_label, "Unknown")
+#     # label_text = label_dict.get(predicted_label, "Unknown")
 
 #     # Overlay the text onto the frame using OpenCV
 #     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -52,7 +64,7 @@ label_dict = {0: 'dewberry_blue', 1: 'creco', 2: 'Ahh', 3: ' rollercoaster_chees
 #     font_scale = 1
 #     color = (0, 255, 0)  # BGR color (green in this example)
 #     thickness = 2
-#     cv2.putText(frame, label_text, org, font, font_scale, color, thickness, cv2.LINE_AA)
+#     cv2.putText(frame, "work", org, font, font_scale, color, thickness, cv2.LINE_AA)
 
 #     # Rebuild a VideoFrame, preserving timing information
 #     new_frame = VideoFrame.from_ndarray(frame.to_ndarray(), format="bgr24")
@@ -60,7 +72,64 @@ label_dict = {0: 'dewberry_blue', 1: 'creco', 2: 'Ahh', 3: ' rollercoaster_chees
 #     new_frame.time_base = frame.time_base
 
 #     return new_frame
+frame_counter = 0
+skip_frames = 10  # Skip every 10 frames
+cached_labels = {}  # Cache predicted labels
 
+def process_frame(frame):
+    global frame_counter, cached_labels
+
+    # Increment frame counter
+    frame_counter += 1
+
+    # Convert the frame to a NumPy ndarray with BGR format
+    img = frame.to_ndarray(format="bgr24")
+
+    # Check if it's time to predict or use a cached label
+    if frame_counter % skip_frames == 0:
+        # Perform image processing or classification using your model
+        # For example, if your model expects input images of size (224, 224, 3):
+        img = cv2.resize(img, (224, 224))  # Resize to match the model input size
+
+        # Ensure the image is in the correct format (3-dimensional)
+        preimg = np.expand_dims(img, axis=0)  # Add batch dimension
+
+        # Predictions and label
+        predictions = model.predict(preimg)
+        predicted_label = np.argmax(predictions)
+
+
+        
+        top_classes = np.argsort(predictions)[0, ::-1][:5]
+        confidence_scores = predictions[0, top_classes]
+        confidence_scores_percent = confidence_scores * 100 / np.sum(confidence_scores)
+        # Display the results
+        for i in range(5):
+            print(f"Class: {label_dict.get(top_classes[i])  }, Confidence: {confidence_scores_percent[i]}")
+
+       
+
+        # Get the text label from your custom label dictionary
+        label_text = label_dict.get(predicted_label)
+        cached_labels[frame_counter] = label_text  # Cache the label
+    else:
+        # Use the cached label from the previous prediction
+        label_text = cached_labels.get(frame_counter - 1, "Unknown")
+
+    # Overlay the text onto the frame using OpenCV
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    org = (10, 50)  # Coordinates to position the text
+    font_scale = 1
+    color = (0, 255, 0)  # BGR color (green in this example)
+    thickness = 2
+    cv2.putText(img, label_text, org, font, font_scale, color, thickness, cv2.LINE_AA)
+
+    # Rebuild a VideoFrame, preserving timing information
+    new_frame = av.VideoFrame.from_ndarray(img, format="bgr24")
+    new_frame.pts = frame.pts
+    new_frame.time_base = frame.time_base
+
+    return new_frame
 class VideoTransformTrack(MediaStreamTrack):
     """
     A video stream track that transforms frames from an another track.
@@ -78,15 +147,15 @@ class VideoTransformTrack(MediaStreamTrack):
         if self.transform == "edges":
             # perform edge detection
 
-            img = frame.to_ndarray(format="bgr24")
-            img = cv2.cvtColor(cv2.Canny(img, 100, 200), cv2.COLOR_GRAY2BGR)
+            # img = frame.to_ndarray(format="bgr24")
+            # img = cv2.cvtColor(cv2.Canny(img, 100, 200), cv2.COLOR_GRAY2BGR)
 
-            # rebuild a VideoFrame, preserving timing information
-            new_frame = VideoFrame.from_ndarray(img, format="bgr24")
-            new_frame.pts = frame.pts
-            new_frame.time_base = frame.time_base
+            # # rebuild a VideoFrame, preserving timing information
+            # new_frame = VideoFrame.from_ndarray(img, format="bgr24")
+            # new_frame.pts = frame.pts
+            # new_frame.time_base = frame.time_base
            
-            # output_frame = process_frame(frame)
+            new_frame = process_frame(frame)
             return new_frame
         else:
             return frame
