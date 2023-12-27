@@ -17,11 +17,13 @@ class _StreamingState extends State<Streaming> {
   RTCPeerConnection? _peerConnection;
   final _localRenderer = RTCVideoRenderer();
 
+  final textKeywordsController = TextEditingController();
   MediaStream? _localStream;
 
   RTCDataChannelInit? _dataChannelDict;
   RTCDataChannel? _dataChannel;
   String transformType = "none";
+  String ipML = "127.0.0.1";
 
   // MediaStream? _localStream;
   bool _inCalling = false;
@@ -53,12 +55,12 @@ class _StreamingState extends State<Streaming> {
 
   Future<bool> _waitForGatheringComplete(_) async {
     print("WAITING FOR GATHERING COMPLETE");
-if (_peerConnection!.iceGatheringState ==
+    if (_peerConnection!.iceGatheringState ==
         RTCIceGatheringState.RTCIceGatheringStateComplete) {
-    return true;
+      return true;
     } else {
-    await Future.delayed(const Duration(seconds: 1));
-    return await _waitForGatheringComplete(_);
+      await Future.delayed(const Duration(seconds: 1));
+      return await _waitForGatheringComplete(_);
     }
   }
 
@@ -71,110 +73,51 @@ if (_peerConnection!.iceGatheringState ==
     await Helper.switchCamera(videoTrack);
   }
 
-//   Future<void> _negotiateRemoteConnection() async {
-//     return _peerConnection!
-//         .createOffer()
-//         .then((offer) async {
-//           print('Before setLocalDescription');
-  
-//           try {
-//   // return await _peerConnection!.setLocalDescription(offer);
-// } catch (error) {
-//   print('Error setting local description: $error');
-// }
-   
-//           print('After setLocalDescription');
- 
-//         })
-//         .then((_) {
-//            print('waitFor');
-//           _waitForGatheringComplete;})
-//         .then((_) async {
-//            print('getLocalDes');
-//           var des = await _peerConnection!.getLocalDescription();
-//           var headers = {
-//             'Content-Type': 'application/json',
-//           };
-//           print('request post');
-//           var request = http.Request(
-//             'POST',
-//             Uri.parse(
-//                 'http://192.168.1.109:8080/offer'), // CHANGE URL HERE TO LOCAL SERVER
-//           );
-           
-//           request.body = json.encode(
-//             {
-//               "sdp": des!.sdp,
-//               "type": des.type,
-//               "video_transform": transformType,
-//             },
-//           );
-//           request.headers.addAll(headers);
-
-//           http.StreamedResponse response = await request.send();
-
-//           String data = "";
-//           print(response);
-//           if (response.statusCode == 200) {
-//             data = await response.stream.bytesToString();
-//             var dataMap = json.decode(data);
-//             print(dataMap);
-//             await _peerConnection!.setRemoteDescription(
-//               RTCSessionDescription(
-//                 dataMap["sdp"],
-//                 dataMap["type"],
-//               ),
-//             );
-//           } else {
-//             print(response.reasonPhrase);
-//           }
-//         });
-//   }
-Future<void> _negotiateRemoteConnection() async {
-  return _peerConnection!
+  Future<void> _negotiateRemoteConnection() async {
+    return _peerConnection!
         .createOffer()
         .then((offer) {
           return _peerConnection!.setLocalDescription(offer);
-})
+        })
         .then(_waitForGatheringComplete)
         .then((_) async {
-    var des = await _peerConnection!.getLocalDescription();
-    var headers = {
-      'Content-Type': 'application/json',
-    };
+          var des = await _peerConnection!.getLocalDescription();
+          var headers = {
+            'Content-Type': 'application/json',
+          };
 
-    var request = http.Request(
-      'POST',
-      Uri.parse(
-                'http://192.168.1.132:8080/offer'), // CHANGE URL HERE TO LOCAL SERVER
-    );
-request.body = json.encode(
+          var request = http.Request(
+            'POST',
+            Uri.parse(
+                'http://$ipML:8080/offer'), // CHANGE URL HERE TO LOCAL SERVER
+          );
+          request.body = json.encode(
             {
-      "sdp": des!.sdp,
-      "type": des.type,
-      "video_transform": transformType, //ADD
+              "sdp": des!.sdp,
+              "type": des.type,
+              "video_transform": transformType, //ADD
             },
           );
-    request.headers.addAll(headers);
+          request.headers.addAll(headers);
 
-    http.StreamedResponse response = await request.send();
+          http.StreamedResponse response = await request.send();
 
-String data = "";
+          String data = "";
           print(response);
-    if (response.statusCode == 200) {
-      data = await response.stream.bytesToString();
-      var dataMap = json.decode(data);
-print(dataMap);
-      await _peerConnection!.setRemoteDescription(
-        RTCSessionDescription(
-          dataMap["sdp"],
-          dataMap["type"],
-        ),
-      );
-    } else {
-      print(response.reasonPhrase);
-    }
-  });
+          if (response.statusCode == 200) {
+            data = await response.stream.bytesToString();
+            var dataMap = json.decode(data);
+            print(dataMap);
+            await _peerConnection!.setRemoteDescription(
+              RTCSessionDescription(
+                dataMap["sdp"],
+                dataMap["type"],
+              ),
+            );
+          } else {
+            print(response.reasonPhrase);
+          }
+        });
   }
 
   Future<void> _makeCall() async {
@@ -205,7 +148,7 @@ print(dataMap);
     );
     _dataChannel!.onDataChannelState = _onDataChannelState;
     // _dataChannel!.onMessage = _onDataChannelMessage;
-   
+
     final mediaConstraints = <String, dynamic>{
       'audio': false,
       'video': {
@@ -220,13 +163,13 @@ print(dataMap);
         'optional': [],
       }
     };
-  print('try stream');
+    print('try stream');
     try {
       var stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
       // _mediaDevicesList = await navigator.mediaDevices.enumerateDevices();
       _localStream = stream;
       // _localRenderer.srcObject = _localStream;
-print('getTracks');
+      print('getTracks');
       stream.getTracks().forEach((element) {
         _peerConnection!.addTrack(element, stream);
       });
@@ -236,7 +179,7 @@ print('getTracks');
     } catch (e) {
       print(e.toString());
     }
-    
+
     if (!mounted) return;
 
     setState(() {
@@ -346,6 +289,7 @@ print('getTracks');
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            new Text(ipML),
                             Text("Transformation: "),
                             DropdownButton(
                               value: transformType,
@@ -369,6 +313,16 @@ print('getTracks');
                         ),
                         SizedBox(
                           width: 20,
+                        ),
+                        TextField(
+                          onSubmitted: (text) {
+                            setState(() {
+                              ipML = text;
+                            });
+                          },
+                          decoration: InputDecoration(
+                            hintText: 'ip',
+                          ),
                         ),
                       ],
                     ),
